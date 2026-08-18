@@ -78,7 +78,6 @@ agent = create_agent(
     "'I am not authorized to answer questions outside of Indian weather and cinema.' "
     "Do not call any tools for unrelated questions. "
     "Your final response must always be plain text."
-)
     )
 )
 
