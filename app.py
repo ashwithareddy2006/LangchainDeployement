@@ -93,21 +93,49 @@ def extract_text_response(agent_output: dict) -> str:
     if not isinstance(agent_output, dict):
         return str(agent_output)
 
-    # Case 1: top-level messages (normal final state)
+    # Get messages from the agent output
     messages = agent_output.get("messages")
 
-    # Case 2: nested under a node name, e.g. {"model": {"messages": [...]}}
+    # Handle nested agent output
     if messages is None:
         for value in agent_output.values():
             if isinstance(value, dict) and "messages" in value:
                 messages = value["messages"]
                 break
 
-    if messages:
-        last = messages[-1]
-        return getattr(last, "content", str(last))
+    if not messages:
+        return str(agent_output)
 
-    return str(agent_output)
+    # Get the final AI message
+    last_message = messages[-1]
+    content = getattr(last_message, "content", "")
+
+    # If the final response is already a string
+    if isinstance(content, str):
+        return content
+
+    # If the model returns a list containing thinking + final answer
+    if isinstance(content, list):
+        text_parts = []
+
+        for item in content:
+            # Keep plain text
+            if isinstance(item, str):
+                text_parts.append(item)
+
+            # Handle content dictionaries
+            elif isinstance(item, dict):
+                # Ignore thinking/reasoning blocks
+                if item.get("type") == "thinking":
+                    continue
+
+                # Keep normal text blocks
+                if "text" in item:
+                    text_parts.append(str(item["text"]))
+
+        return "".join(text_parts).strip()
+
+    return str(content)
 
 formatted_agent_chain = (
     RunnableLambda(format_for_agent)
