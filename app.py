@@ -88,54 +88,42 @@ class AgentInput(BaseModel):
 def format_for_agent(x) -> dict:
     user_input = x["input"] if isinstance(x, dict) else x.input
     return {"messages": [("user", user_input)]}
-
 def extract_text_response(agent_output: dict) -> str:
     if not isinstance(agent_output, dict):
         return str(agent_output)
 
-    # Get messages from the agent output
+    # Case 1: top-level messages (normal final state)
     messages = agent_output.get("messages")
 
-    # Handle nested agent output
+    # Case 2: nested under a node name, e.g. {"model": {"messages": [...]}}
     if messages is None:
         for value in agent_output.values():
             if isinstance(value, dict) and "messages" in value:
                 messages = value["messages"]
                 break
 
-    if not messages:
-        return str(agent_output)
+    if messages:
+        last = messages[-1]
+        return getattr(last, "content", str(last))
 
-    # Get the final AI message
-    last_message = messages[-1]
-    content = getattr(last_message, "content", "")
+    return str(agent_output)
 
-    # If the final response is already a string
-    if isinstance(content, str):
-        return content
+formatted_agent_chain = (
+    RunnableLambda(format_for_agent)
+    | agent
+    | RunnableLambda(extract_text_response)
+).with_types(input_type=AgentInput, output_type=str)
 
-    # If the model returns a list containing thinking + final answer
-    if isinstance(content, list):
-        text_parts = []
+# --- 3. FastAPI App ---
+##Need To Code
+app= FastAPI(title="Indian Weather and Cinema Agent")
+add_routes(app,
+           formatted_agent_chain,
+           path="/agent",
+           playground_type="default")
 
-        for item in content:
-            # Keep plain text
-            if isinstance(item, str):
-                text_parts.append(item)
 
-            # Handle content dictionaries
-            elif isinstance(item, dict):
-                # Ignore thinking/reasoning blocks
-                if item.get("type") == "thinking":
-                    continue
-
-                # Keep normal text blocks
-                if "text" in item:
-                    text_parts.append(str(item["text"]))
-
-        return "".join(text_parts).strip()
-
-    return str(content)
+                
 
 formatted_agent_chain = (
     RunnableLambda(format_for_agent)
